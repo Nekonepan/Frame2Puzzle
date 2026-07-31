@@ -216,3 +216,21 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local IDE/editor settings
+.vscode/
+.idea/
+
+# macOS Finder
+.DS_Store
+
+# Editor swap/temp files
+*.swp
+*~
+
+# Environment files (local secrets)
+.env
+.envrc
+
+# Local logs
+*.log
