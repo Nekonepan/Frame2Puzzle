@@ -234,3 +234,5 @@ __marimo__/
 
 # Local logs
 *.log
+\n# Ignore local model/task files
+hand_landmarker.task
