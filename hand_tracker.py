@@ -66,12 +66,28 @@ class HandTracker:
         )
         return self.last_results
 
-    def draw_landmarks(self, frame, results=None, is_mirrored=True):
-        """Menggambar 21 titik landmark tangan dan garis koneksi pada frame
+    def get_hand_points(self, frame, results=None):
+        """Mengembalikan daftar koordinat piksel 21 landmark untuk setiap tangan yang terdeteksi"""
+        if results is None:
+            results = self.last_results
 
-        is_mirrored: Jika True (default), balikkan label 'Left' <-> 'Right'
-        agar sesuai dengan tampilan cermin pengguna.
-        """
+        if not results or not results.hand_landmarks:
+            return []
+
+        h, w, _ = frame.shape
+        hands_points = []
+
+        for landmarks in results.hand_landmarks:
+            points = []
+            for lm in landmarks:
+                cx, cy = int(lm.x * w), int(lm.y * h)
+                points.append((cx, cy))
+            hands_points.append(points)
+
+        return hands_points
+
+    def draw_landmarks(self, frame, results=None, is_mirrored=True):
+        """Menggambar 21 titik landmark tangan dan garis koneksi pada frame"""
         if results is None:
             results = self.last_results
 
@@ -81,19 +97,18 @@ class HandTracker:
         h, w, _ = frame.shape
 
         for hand_idx, landmarks in enumerate(results.hand_landmarks):
-            # 1. Konversi koordinat normalisasi ke piksel layar
             points = []
             for lm in landmarks:
                 cx, cy = int(lm.x * w), int(lm.y * h)
                 points.append((cx, cy))
 
-            # 2. Gambar garis koneksi antar titik tangan
+            # 1. Gambar garis koneksi antar titik tangan
             for p1_idx, p2_idx in self.HAND_CONNECTIONS:
                 pt1 = points[p1_idx]
                 pt2 = points[p2_idx]
                 cv2.line(frame, pt1, pt2, (255, 200, 0), 2, cv2.LINE_AA)
 
-            # 3. Gambar 21 titik sendi (Landmarks)
+            # 2. Gambar 21 titik sendi (Landmarks)
             for idx, (cx, cy) in enumerate(points):
                 if idx in self.FINGERTIP_IDS:
                     cv2.circle(frame, (cx, cy), 8, (0, 0, 255), -1, cv2.LINE_AA)
@@ -103,15 +118,12 @@ class HandTracker:
                 else:
                     cv2.circle(frame, (cx, cy), 5, (0, 255, 255), -1, cv2.LINE_AA)
 
-            # 4. Koreksi dan Tampilkan Label Handedness (Kanan / Kiri)
+            # 3. Koreksi dan Tampilkan Label Handedness (Kanan / Kiri)
             if results.handedness and hand_idx < len(results.handedness):
                 hand_info = results.handedness[hand_idx][0]
-                raw_label = hand_info.category_name  # 'Left' atau 'Right' dari sensor
+                raw_label = hand_info.category_name
                 score = int(hand_info.score * 100)
 
-                # Jika tampilan kamera di-mirror (cermin), balikkan labelnya:
-                # 'Left' di sensor -> Tangan Kanan fisik pengguna di cermin
-                # 'Right' di sensor -> Tangan Kiri fisik pengguna di cermin
                 if is_mirrored:
                     display_label = (
                         "Kanan" if raw_label == "Left" else "Kiri"
