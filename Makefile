@@ -4,40 +4,40 @@ PIP = $(VENV)/bin/pip
 
 .PHONY: all run setup clean help
 
-# Target default ketika mengetik 'make'
+# Default target when typing 'make'
 all: run
 
-# Menjalankan aplikasi Frame2Puzzle
+# Run Frame2Puzzle application
 run: $(VENV)
-	@echo "🚀 Menjalankan Frame2Puzzle..."
+	@echo "🚀 Running Frame2Puzzle..."
 	@$(PYTHON) main.py
 
-# Membentuk virtual environment & menginstal dependensi dari requirements.txt
+# Create virtual environment & install dependencies from requirements.txt
 setup: $(VENV)
 
 $(VENV): requirements.txt
-	@echo "📦 Membentuk Virtual Environment (.venv) & Menginstal Dependensi..."
+	@echo "📦 Creating Virtual Environment (.venv) & Installing Dependencies..."
 	python3 -m venv $(VENV)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
-	@echo "✅ Setup selesai!"
+	@echo "✅ Setup complete!"
 
-# Membersihkan cache Python dan virtual environment
+# Clean Python cache and virtual environment
 clean:
-	@echo "🧹 Membersihkan file cache dan virtual environment..."
+	@echo "🧹 Cleaning cache files and virtual environment..."
 	rm -rf $(VENV)
 	rm -rf __pycache__ *.pyc
 	rm -rf .pytest_cache
-	@echo "✨ Bersih!"
+	@echo "✨ Cleaned successfully!"
 
-# Menampilkan daftar perintah yang tersedia
+# Show Makefile help menu
 help:
 	@echo "======================================================="
 	@echo "            Makefile Frame2Puzzle Project              "
 	@echo "======================================================="
-	@echo "  make         : Jalankan aplikasi Frame2Puzzle secara langsung"
-	@echo "  make run     : Menjalankan aplikasi Frame2Puzzle"
-	@echo "  make setup   : Membuat .venv & memasang seluruh dependensi"
-	@echo "  make clean   : Menghapus .venv dan file cache Python"
-	@echo "  make help    : Menampilkan bantuan perintah ini"
+	@echo "  make         : Run Frame2Puzzle application directly"
+	@echo "  make run     : Run Frame2Puzzle application"
+	@echo "  make setup   : Create .venv & install all dependencies"
+	@echo "  make clean   : Remove .venv and Python cache files"
+	@echo "  make help    : Show this help menu"
 	@echo "======================================================="

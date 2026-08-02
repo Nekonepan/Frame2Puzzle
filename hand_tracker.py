@@ -7,30 +7,30 @@ from mediapipe.tasks.python import vision
 
 
 class HandTracker:
-    """Kelas untuk mengelola deteksi dan pengolahan Hand Tracking MediaPipe (21 Landmarks)"""
+    """Class to manage MediaPipe Hand Tracking detection and landmark processing (21 Landmarks)."""
 
     HAND_CONNECTIONS = [
         (0, 1),
         (1, 2),
         (2, 3),
-        (3, 4),  # Ibu Jari (Thumb)
+        (3, 4),  # Thumb
         (0, 5),
         (5, 6),
         (6, 7),
-        (7, 8),  # Jari Telunjuk (Index)
+        (7, 8),  # Index Finger
         (5, 9),
         (9, 10),
         (10, 11),
-        (11, 12),  # Jari Tengah (Middle)
+        (11, 12),  # Middle Finger
         (9, 13),
         (13, 14),
         (14, 15),
-        (15, 16),  # Jari Manis (Ring)
+        (15, 16),  # Ring Finger
         (13, 17),
         (17, 18),
         (18, 19),
         (19, 20),
-        (0, 17),  # Telapak & Jari Kelingking (Pinky)
+        (0, 17),  # Palm & Pinky Finger
     ]
 
     FINGERTIP_IDS = [4, 8, 12, 16, 20]
@@ -56,7 +56,7 @@ class HandTracker:
         self.last_results = None
 
     def process_frame(self, frame):
-        """Memproses frame gambar (BGR) dan mendeteksi landmark tangan"""
+        """Processes the input BGR image frame and detects hand landmarks."""
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
@@ -67,7 +67,7 @@ class HandTracker:
         return self.last_results
 
     def get_hand_points(self, frame, results=None):
-        """Mengembalikan daftar koordinat piksel 21 landmark untuk setiap tangan yang terdeteksi"""
+        """Returns a list of 21 landmark pixel coordinates for each detected hand."""
         if results is None:
             results = self.last_results
 
@@ -87,7 +87,10 @@ class HandTracker:
         return hands_points
 
     def draw_landmarks(self, frame, results=None, is_mirrored=True):
-        """Menggambar 21 titik landmark tangan dan garis koneksi pada frame"""
+        """Draws 21 hand landmark points and skeletal connection lines on the frame.
+
+        is_mirrored: Swaps 'Left' <-> 'Right' label to match user's mirror view perspective.
+        """
         if results is None:
             results = self.last_results
 
@@ -102,13 +105,13 @@ class HandTracker:
                 cx, cy = int(lm.x * w), int(lm.y * h)
                 points.append((cx, cy))
 
-            # 1. Gambar garis koneksi antar titik tangan
+            # 1. Draw connection lines between landmark points
             for p1_idx, p2_idx in self.HAND_CONNECTIONS:
                 pt1 = points[p1_idx]
                 pt2 = points[p2_idx]
                 cv2.line(frame, pt1, pt2, (255, 200, 0), 2, cv2.LINE_AA)
 
-            # 2. Gambar 21 titik sendi (Landmarks)
+            # 2. Draw 21 joint landmark nodes
             for idx, (cx, cy) in enumerate(points):
                 if idx in self.FINGERTIP_IDS:
                     cv2.circle(frame, (cx, cy), 8, (0, 0, 255), -1, cv2.LINE_AA)
@@ -118,20 +121,16 @@ class HandTracker:
                 else:
                     cv2.circle(frame, (cx, cy), 5, (0, 255, 255), -1, cv2.LINE_AA)
 
-            # 3. Koreksi dan Tampilkan Label Handedness (Kanan / Kiri)
+            # 3. Mirror-correct and render Handedness Label (Right / Left)
             if results.handedness and hand_idx < len(results.handedness):
                 hand_info = results.handedness[hand_idx][0]
                 raw_label = hand_info.category_name
                 score = int(hand_info.score * 100)
 
                 if is_mirrored:
-                    display_label = (
-                        "Kanan" if raw_label == "Left" else "Kiri"
-                    )
+                    display_label = "Right" if raw_label == "Left" else "Left"
                 else:
-                    display_label = (
-                        "Kiri" if raw_label == "Left" else "Kanan"
-                    )
+                    display_label = "Left" if raw_label == "Left" else "Right"
 
                 wrist_x, wrist_y = points[0]
                 cv2.putText(
@@ -148,6 +147,6 @@ class HandTracker:
         return frame
 
     def close(self):
-        """Menutup detector resource"""
+        """Closes the underlying MediaPipe detector resource."""
         if self.detector:
             self.detector.close()
