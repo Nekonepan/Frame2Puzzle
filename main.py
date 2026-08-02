@@ -2,6 +2,7 @@ import cv2
 import time
 from hand_tracker import HandTracker
 from gesture_recognizer import GestureRecognizer
+from capture_manager import CaptureManager
 
 
 def main():
@@ -12,22 +13,28 @@ def main():
         print("Error: Tidak dapat mengakses kamera.")
         return
 
-    window_name = "Frame2Puzzle - Fase 3 (Gesture Recognition)"
+    window_name = "Frame2Puzzle - Fase 4 (In-Memory Image Capture)"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
-    # 2. Inisialisasi Hand Tracker & Gesture Recognizer
-    print("Menginisialisasi MediaPipe Hand Tracking & Gesture Recognition...")
+    # 2. Inisialisasi Tracker, Recognizer, dan Capture Manager
+    print("Menginisialisasi Hand Tracker, Gesture Recognizer, & Capture Manager...")
     tracker = HandTracker(model_path="hand_landmarker.task", num_hands=2)
     recognizer = GestureRecognizer(pinch_threshold_px=40)
+    capture_mgr = CaptureManager(countdown_seconds=3.0)
 
     prev_time = 0
 
-    print("\n--- Fase 3 Aktif: Pengenalan Gestur Tangan ---")
-    print("Gestur yang didukung:")
-    print("1. PINCH      : Jepit Ujung Ibu Jari (#4) & Ujung Telunjuk (#8)")
-    print("2. OPEN PALM  : Buka Kelima Jari Tangan")
-    print("3. FRAME      : Bentuk Bingkai Persegi Menggunakan Dua Tangan")
-    print("\nTekan 'q' atau 'ESC' pada jendela kamera untuk keluar.\n")
+    print("\n=======================================================")
+    print("  Fase 4 Aktif: Penangkapan Gambar Temporer (RAM Only)")
+    print("=======================================================")
+    print("Petunjuk Penggunaan:")
+    print("1. Bentuk FRAME GESTURE (2 Tangan Sudut L) di depan kamera.")
+    print("2. Tahan gestur bingkai selama 3 detik (Hitung Mundur 3... 2... 1...).")
+    print("3. Foto area bingkai akan otomatis ditangkap di RAM saat hitungan 0!")
+    print("4. Setelah foto ditangkap:")
+    print("   - Buka Telapak Tangan (OPEN PALM) atau tekan 'r' untuk Foto Ulang.")
+    print("5. Tekan 'q' atau 'ESC' untuk keluar.")
+    print("=======================================================\n")
 
     while True:
         success, frame = cap.read()
@@ -38,124 +45,111 @@ def main():
         # Flip frame horisontal agar seperti cermin
         frame = cv2.flip(frame, 1)
 
-        # 3. Deteksi Landmark Tangan
-        results = tracker.process_frame(frame)
-        frame = tracker.draw_landmarks(frame, results, is_mirrored=True)
+        # Simpan copy mentah bersih tanpa garis/landmark UI untuk foto puzzle
+        raw_frame = frame.copy()
 
-        # Dapatkan titik-titik landmark (pixel coordinates)
+        # 3. Deteksi Landmark Tangan & Point Extraction
+        results = tracker.process_frame(frame)
         hands_pts = tracker.get_hand_points(frame, results)
 
-        active_gestures = []
-
-        # 4. Deteksi Gestur Dua Tangan (FRAME GESTURE)
+        # Deteksi Gestur Bingkai Foto (FRAME GESTURE)
         is_frame_detected, frame_roi = recognizer.detect_frame_gesture(hands_pts)
 
-        if is_frame_detected and frame_roi:
-            active_gestures.append("FRAME GESTURE")
-            min_x, min_y, max_x, max_y = frame_roi
+        # Deteksi Gestur Tangan Tunggal (OPEN_PALM & PINCH)
+        any_open_palm = False
+        for pts in hands_pts:
+            gesture_name, _ = recognizer.detect_single_hand_gesture(pts)
+            if gesture_name == GestureRecognizer.GESTURE_OPEN_PALM:
+                any_open_palm = True
 
-            # Gambar Bingkai Foto (Frame ROI) dengan sudut berkilau (Neon Green/Cyan)
-            cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), (0, 255, 0), 3)
+        # 4. State Machine Alur Capture (STREAMING -> COUNTDOWN -> CAPTURED)
+        if capture_mgr.state == CaptureManager.STATE_STREAMING:
+            if is_frame_detected:
+                capture_mgr.start_countdown()
 
-            # Gambar sudut-sudut dekoratif pada bingkai
-            corner_len = 25
-            # Top-Left
-            cv2.line(frame, (min_x, min_y), (min_x + corner_len, min_y), (0, 255, 255), 5)
-            cv2.line(frame, (min_x, min_y), (min_x, min_y + corner_len), (0, 255, 255), 5)
-            # Top-Right
-            cv2.line(frame, (max_x, min_y), (max_x - corner_len, min_y), (0, 255, 255), 5)
-            cv2.line(frame, (max_x, min_y), (max_x, min_y + corner_len), (0, 255, 255), 5)
-            # Bottom-Left
-            cv2.line(frame, (min_x, max_y), (min_x + corner_len, max_y), (0, 255, 255), 5)
-            cv2.line(frame, (min_x, max_y), (min_x, max_y - corner_len), (0, 255, 255), 5)
-            # Bottom-Right
-            cv2.line(frame, (max_x, max_y), (max_x - corner_len, max_y), (0, 255, 255), 5)
-            cv2.line(frame, (max_x, max_y), (max_x, max_y - corner_len), (0, 255, 255), 5)
+        elif capture_mgr.state == CaptureManager.STATE_COUNTDOWN:
+            if is_frame_detected:
+                is_finished = capture_mgr.update_countdown()
+                if is_finished:
+                    # Ambil foto mentah bersih di area bingkai ROI (Simpan di RAM)
+                    capture_mgr.trigger_capture(raw_frame, frame_roi)
+            else:
+                # Batalkan hitung mundur jika gestur bingkai terputus sebelum 0 detik
+                capture_mgr.cancel_countdown()
 
-            # Label Bingkai Foto
+        elif capture_mgr.state == CaptureManager.STATE_CAPTURED:
+            if any_open_palm:
+                capture_mgr.retake()
+
+        # 5. Visualisasi Landmarks & UI Overlay
+        if capture_mgr.state == CaptureManager.STATE_CAPTURED and capture_mgr.cropped_roi_image is not None:
+            # Tampilkan preview foto tangkapan memori di pojok kanan bawah
+            preview_img = capture_mgr.cropped_roi_image
+            ph, pw = preview_img.shape[:2]
+            max_preview_size = 220
+            scale = min(max_preview_size / pw, max_preview_size / ph)
+            nw, nh = int(pw * scale), int(ph * scale)
+            resized_preview = cv2.resize(preview_img, (nw, nh))
+
+            fh, fw = frame.shape[:2]
+            px1, py1 = fw - nw - 20, fh - nh - 20
+            px2, py2 = px1 + nw, py1 + nh
+            frame[py1:py2, px1:px2] = resized_preview
+            cv2.rectangle(frame, (px1, py1), (px2, py2), (0, 255, 0), 2)
             cv2.putText(
                 frame,
-                "FRAME DETECTED (Siap Tangkap Gambar)",
-                (min_x, max(30, min_y - 12)),
+                "Preview RAM Puzzle",
+                (px1, py1 - 8),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
+                0.5,
                 (0, 255, 0),
-                2,
+                1,
                 cv2.LINE_AA,
             )
 
-        # 5. Deteksi Gestur Satu Tangan per Tangan (PINCH, OPEN_PALM)
-        for idx, pts in enumerate(hands_pts):
-            gesture_name, info = recognizer.detect_single_hand_gesture(pts)
+        # Draw hand landmarks
+        frame = tracker.draw_landmarks(frame, results, is_mirrored=True)
 
-            if gesture_name != GestureRecognizer.GESTURE_NONE:
-                active_gestures.append(f"Tangan {idx+1}: {gesture_name}")
+        # Draw Bingkai Foto jika terdeteksi
+        if is_frame_detected and frame_roi:
+            min_x, min_y, max_x, max_y = frame_roi
+            border_color = (0, 255, 0) if capture_mgr.state == CaptureManager.STATE_COUNTDOWN else (0, 255, 255)
+            cv2.rectangle(frame, (min_x, min_y), (max_x, max_y), border_color, 3)
 
-            # Visual Efek khusus untuk Pinch (Kursor Drag & Drop)
-            if gesture_name == GestureRecognizer.GESTURE_PINCH:
-                cx, cy = info["pinch_center"]
-                cv2.circle(frame, (cx, cy), 14, (0, 0, 255), -1, cv2.LINE_AA)
-                cv2.circle(frame, (cx, cy), 18, (255, 255, 255), 3, cv2.LINE_AA)
-                cv2.putText(
-                    frame,
-                    "PINCH / GRAB",
-                    (cx + 22, cy + 5),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 0, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
+            clen = 25
+            cv2.line(frame, (min_x, min_y), (min_x + clen, min_y), (0, 255, 255), 5)
+            cv2.line(frame, (min_x, min_y), (min_x, min_y + clen), (0, 255, 255), 5)
+            cv2.line(frame, (max_x, min_y), (max_x - clen, min_y), (0, 255, 255), 5)
+            cv2.line(frame, (max_x, min_y), (max_x, min_y + clen), (0, 255, 255), 5)
 
-        # 6. Menghitung FPS (Frames Per Second)
+        # Render UI Countdown / Flash / Banner
+        frame = capture_mgr.draw_ui(frame, frame_roi)
+
+        # 6. Menghitung & Menampilkan FPS
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time) if (curr_time - prev_time) > 0 else 0
         prev_time = curr_time
 
-        # Overlay Informasi UI
         cv2.putText(
             frame,
             f"FPS: {int(fps)}",
-            (20, 40),
+            (20, 35),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.9,
+            0.8,
             (0, 255, 0),
             2,
             cv2.LINE_AA,
         )
 
-        # Tampilkan Badge Status Gestur Aktif
-        if active_gestures:
-            gestures_str = " | ".join(active_gestures)
-            cv2.putText(
-                frame,
-                f"Gestur: {gestures_str}",
-                (20, 85),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.75,
-                (0, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
-        else:
-            cv2.putText(
-                frame,
-                "Gestur: Menunggu Gestur...",
-                (20, 85),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (180, 180, 180),
-                1,
-                cv2.LINE_AA,
-            )
-
         # Menampilkan Frame ke Jendela Aplikasi
         cv2.imshow(window_name, frame)
 
-        # Keluar jika pengguna menekan 'q' atau 'ESC'
+        # Keyboard Shortcut: 'r' (Retake), 'q'/ESC (Quit)
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q") or key == 27:
             break
+        elif key == ord("r"):
+            capture_mgr.retake()
 
     # Cleanup resources
     tracker.close()
