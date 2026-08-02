@@ -4,7 +4,7 @@ import numpy as np
 
 
 class CaptureManager:
-    """Mengelola alur state penangkapan gambar: Countdown -> Shutter Flash -> In-Memory Crop (RAM)"""
+    """Mengelola alur state penangkapan gambar penuh (Full Frame) di memori RAM"""
 
     STATE_STREAMING = "STREAMING"
     STATE_COUNTDOWN = "COUNTDOWN"
@@ -17,9 +17,7 @@ class CaptureManager:
         self.countdown_start_time = 0
         self.remaining_time = countdown_seconds
 
-        # Gambar hasil tangkapan disimpan murni di memori RAM (NumPy ndarray)
         self.captured_image = None
-        self.cropped_roi_image = None
         self.flash_start_time = 0
         self.flash_duration = 0.35  # Durasi efek kilat kamera dalam detik
 
@@ -30,7 +28,7 @@ class CaptureManager:
             self.countdown_start_time = time.time()
 
     def cancel_countdown(self):
-        """Membatalkan countdown jika gestur bingkai terputus"""
+        """Membatalkan countdown jika gestur terputus"""
         self.state = self.STATE_STREAMING
         self.remaining_time = self.countdown_seconds
 
@@ -46,42 +44,24 @@ class CaptureManager:
             return True
         return False
 
-    def trigger_capture(self, raw_frame, frame_roi=None):
-        """Mengambil dan memotong gambar murni di dalam memori RAM (tanpa menulis ke disk)"""
+    def trigger_capture(self, raw_frame):
+        """Mengambil seluruh bingkai/layar gambar murni (Full Frame) di RAM"""
         self.state = self.STATE_CAPTURED
         self.flash_start_time = time.time()
-
-        h, w = raw_frame.shape[:2]
-
-        if frame_roi:
-            min_x, min_y, max_x, max_y = frame_roi
-            # Batasi koordinat agar berada dalam rentang gambar
-            min_x, min_y = max(0, min_x), max(0, min_y)
-            max_x, max_y = min(w, max_x), min(h, max_y)
-
-            # Jika area potong cukup besar (> 80px), gunakan area bingkai
-            if (max_x - min_x) > 80 and (max_y - min_y) > 80:
-                self.cropped_roi_image = raw_frame[min_y:max_y, min_x:max_x].copy()
-            else:
-                self.cropped_roi_image = raw_frame.copy()
-        else:
-            self.cropped_roi_image = raw_frame.copy()
-
         self.captured_image = raw_frame.copy()
-        print("\n[RAM CAPTURE] Gambar berhasil ditangkap dan disimpan di dalam memori (RAM)!")
+        print("\n[FULL FRAME CAPTURE] Foto seluruh bingkai berhasil ditangkap dan disimpan di RAM!")
 
     def retake(self):
-        """Kembali ke mode streaming dan menghapus memori tangkapan foto sebelumnya"""
+        """Kembali ke mode streaming dan menghapus tangkapan foto sebelumnya"""
         self.state = self.STATE_STREAMING
         self.remaining_time = self.countdown_seconds
         self.captured_image = None
-        self.cropped_roi_image = None
 
-    def draw_ui(self, display_frame, frame_roi=None):
+    def draw_ui(self, display_frame):
         """Menggambar efek visual UI countdown, kilat kamera, dan petunjuk di layar"""
         h, w = display_frame.shape[:2]
 
-        # 1. Efek Shutter Flash (Layar berkedip putih saat mengambil foto)
+        # 1. Efek Shutter Flash
         if self.state == self.STATE_CAPTURED and (time.time() - self.flash_start_time < self.flash_duration):
             flash_overlay = np.full_like(display_frame, 255)
             alpha = 1.0 - ((time.time() - self.flash_start_time) / self.flash_duration)
@@ -94,18 +74,14 @@ class CaptureManager:
                 count_num = 1
 
             cx, cy = w // 2, h // 2
-            if frame_roi:
-                min_x, min_y, max_x, max_y = frame_roi
-                cx = (min_x + max_x) // 2
-                cy = (min_y + max_y) // 2
-
             text_str = str(count_num)
-            font_scale = 3.5
-            thickness = 7
+            font_scale = 4.0
+            thickness = 8
             (tw, th), _ = cv2.getTextSize(text_str, cv2.FONT_HERSHEY_DUPLEX, font_scale, thickness)
 
-            cv2.circle(display_frame, (cx, cy), 70, (0, 0, 0), -1)
-            cv2.circle(display_frame, (cx, cy), 70, (0, 255, 255), 4)
+            # Lingkaran progress di tengah layar
+            cv2.circle(display_frame, (cx, cy), 80, (0, 0, 0), -1)
+            cv2.circle(display_frame, (cx, cy), 80, (0, 255, 255), 5)
 
             cv2.putText(
                 display_frame,
@@ -120,10 +96,10 @@ class CaptureManager:
 
             cv2.putText(
                 display_frame,
-                "Tahan Bingkai Tangan!",
-                (cx - 130, cy + 110),
+                "Tahan Gestur 2 Jari!",
+                (cx - 140, cy + 125),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.75,
+                0.8,
                 (0, 255, 255),
                 2,
                 cv2.LINE_AA,
@@ -137,7 +113,7 @@ class CaptureManager:
 
             cv2.putText(
                 display_frame,
-                "FOTO TERCAPTURE DI MEMORI! siap dijadikan puzzle.",
+                "FOTO FULL FRAME TERCAPTURE DI MEMORI!",
                 (20, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.75,
