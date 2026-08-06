@@ -40,6 +40,7 @@ help:
 	@echo "======================================================="
 	@echo "            Makefile Frame2Puzzle Project              "
 	@echo "======================================================="
+	@echo "  make all     : Full setup + download model + run app"
 	@echo "  make         : Run Frame2Puzzle application directly"
 	@echo "  make run     : Run Frame2Puzzle application"
 	@echo "  make get-model: Download hand_landmarker.task into repo root"
