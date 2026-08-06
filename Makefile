@@ -4,8 +4,8 @@ PIP = $(VENV)/bin/pip
 
 .PHONY: all run setup clean help get-model
 
-# Default target when typing 'make'
-all: run
+# Default target when typing 'make' — run full setup, download model and start app
+all: get-model setup run
 
 # Run Frame2Puzzle application
 run: $(VENV)
