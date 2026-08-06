@@ -106,12 +106,8 @@ def main():
                 capture_mgr.state = STATE_PUZZLE_GAME
 
         elif capture_mgr.state == STATE_PUZZLE_GAME:
-            # --- Phase 6: Drag Interaction Logic ---
-            if any_open_palm and puzzle_mgr.dragged_piece is None:
-                # Only allow retake when NOT actively dragging a tile
-                capture_mgr.retake()
-                was_pinch = False
-            elif any_pinch and pinch_centers:
+            # --- Phase 6: Drag Interaction Logic (Keyboard-only restart) ---
+            if any_pinch and pinch_centers:
                 cursor_x, cursor_y = pinch_centers[0]
 
                 if not was_pinch:

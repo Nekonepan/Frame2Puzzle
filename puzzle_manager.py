@@ -411,7 +411,7 @@ class PuzzleManager:
             )
             cv2.putText(
                 display_frame,
-                "Show OPEN PALM Gesture or Press 'r' to Play Again",
+                "Press 'r' to Play Again",
                 (20, 60),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.55,
