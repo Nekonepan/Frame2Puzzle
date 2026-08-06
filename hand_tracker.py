@@ -43,6 +43,53 @@ class HandTracker:
         min_hand_presence_confidence=0.5,
         min_tracking_confidence=0.5,
     ):
+        # Ensure model file exists; try to download common MediaPipe-hosted locations if missing.
+        import os
+        import urllib.request
+
+        def try_download(url, dest):
+            try:
+                print(f"Attempting to download model from: {url}")
+                urllib.request.urlretrieve(url, dest)
+                size = os.path.getsize(dest)
+                if size > 1024:
+                    print(f"Downloaded model ({size} bytes) to {dest}")
+                    return True
+                else:
+                    print("Downloaded file too small, likely invalid. Removing.")
+                    os.remove(dest)
+            except Exception as e:
+                print(f"Download failed from {url}: {e}")
+            return False
+
+        if not os.path.exists(model_path):
+            print(f"Model not found at '{model_path}'. Trying to auto-download common MediaPipe assets...")
+            candidates = [
+                "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker.task",
+                "https://storage.googleapis.com/mediapipe-assets/hand_landmarker.task",
+            ]
+            downloaded = False
+            for url in candidates:
+                if try_download(url, model_path):
+                    downloaded = True
+                    break
+
+            if not downloaded:
+                try:
+                    user_url = input(
+                        "hand_landmarker.task not found. Paste a direct URL to download the model (or press Enter to abort): "
+                    ).strip()
+                except Exception:
+                    user_url = ""
+
+                if user_url:
+                    if not try_download(user_url, model_path):
+                        raise FileNotFoundError(
+                            f"Failed to download model from provided URL: {user_url}"
+                        )
+                else:
+                    raise FileNotFoundError(f"Unable to open file at {model_path}")
+
         base_options = python.BaseOptions(model_asset_path=model_path)
         options = vision.HandLandmarkerOptions(
             base_options=base_options,

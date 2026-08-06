@@ -74,3 +74,25 @@ make run
 
 ## 📄 License
 This project is open-source and available under the [MIT License](LICENSE).
+
+## 🧠 Model Asset (hand_landmarker.task)
+The MediaPipe Hand Landmarker model (hand_landmarker.task) is a binary asset and is intentionally gitignored to keep the repository small.
+
+To run the app after cloning, fetch the model into the repository root. Two convenient options are provided:
+
+1) Non-interactive downloader script (recommended):
+
+```bash
+# Try known public locations or provide a direct URL:
+./scripts/get_model.sh
+# Or provide a direct URL if you host the model yourself:
+./scripts/get_model.sh https://example.com/hand_landmarker.task
+```
+
+2) Manual: place a valid `hand_landmarker.task` file at the repository root.
+
+Notes:
+- The downloader will print the downloaded file size and SHA256 to help verification.
+- If you prefer to host the model for team use, place it in a release asset or a storage bucket and update the script's CANDIDATES array.
+
+These steps avoid committing the large binary into git while making local runs reproducible.
