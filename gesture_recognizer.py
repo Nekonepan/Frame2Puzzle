@@ -8,12 +8,13 @@ class GestureRecognizer:
     """Class for recognizing hand gestures based on MediaPipe 21 Landmark coordinates with Temporal Smoothing."""
 
     GESTURE_NONE = "NONE"
-    GESTURE_PINCH = "PINCH"
+    GESTURE_GRAB = "GRAB"
     GESTURE_OPEN_PALM = "OPEN_PALM"
     GESTURE_TWO_FINGERS = "TWO_FINGERS"
 
-    def __init__(self, pinch_threshold_px=45, history_len=3):
-        self.pinch_threshold_px = pinch_threshold_px
+    def __init__(self, grab_spread_threshold_px=55, history_len=3):
+        # Maximum allowed spread (distance from any fingertip to centroid) for GRAB detection
+        self.grab_spread_threshold_px = grab_spread_threshold_px
         # Temporal gesture history buffer for debouncing 1-frame noise
         self.gesture_history = deque(maxlen=history_len)
 
@@ -40,16 +41,17 @@ class GestureRecognizer:
         ring_tip, ring_pip, ring_mcp = points[16], points[14], points[13]
         pinky_tip, pinky_pip, pinky_mcp = points[20], points[18], points[17]
 
-        # 1. Calculate Pinch Distance (Thumb Tip #4 to Index Tip #8)
-        pinch_dist = self._euclidean_distance(thumb_tip, index_tip)
+        # 1. GRAB Detection: All 5 fingertips must be clustered tightly together
+        fingertips = [thumb_tip, index_tip, middle_tip, ring_tip, pinky_tip]
+        centroid_x = sum(pt[0] for pt in fingertips) // 5
+        centroid_y = sum(pt[1] for pt in fingertips) // 5
+        grab_center = (centroid_x, centroid_y)
 
-        # Validate index finger extension to avoid fist false positives
-        dist_index_wrist = self._euclidean_distance(index_tip, wrist)
-        dist_mcp_wrist = self._euclidean_distance(index_mcp, wrist)
-        is_index_extended = dist_index_wrist > dist_mcp_wrist * 1.05
+        # Calculate max distance from any fingertip to the centroid (spread radius)
+        grab_spread = max(self._euclidean_distance(tip, grab_center) for tip in fingertips)
 
-        # PINCH is TRUE if tips are close AND index is extended outwards
-        is_pinch = (pinch_dist <= self.pinch_threshold_px) and is_index_extended
+        # GRAB is TRUE only when ALL 5 fingertips are within the spread threshold
+        is_grab = grab_spread <= self.grab_spread_threshold_px
 
         # 2. Check finger extension for all 4 main fingers
         index_open = self.check_finger_extended(points, 8, 6, 5)
@@ -62,30 +64,27 @@ class GestureRecognizer:
 
         open_fingers_count = sum([index_open, middle_open, ring_open, pinky_open])
 
-        # 3. 2-Finger Capture Gesture (Index + Middle extended, Ring & Pinky strictly folded, NOT pinching)
+        # 3. 2-Finger Capture Gesture (Index + Middle extended, Ring & Pinky folded, NOT grabbing)
         is_two_fingers = (
             index_open
             and middle_open
             and not ring_open
             and not pinky_open
-            and (pinch_dist > self.pinch_threshold_px * 1.2)
+            and not is_grab
         )
 
-        # 4. OPEN PALM Gesture (All 5 fingers extended, AND Thumb & Index are NOT pinching)
+        # 4. OPEN PALM Gesture (All 5 fingers extended and spread apart, NOT grabbing)
         is_open_palm = (
             open_fingers_count >= 4
             and thumb_open
-            and (pinch_dist > self.pinch_threshold_px * 1.5)  # STRICT: Pinch tips MUST be separated!
+            and not is_grab
         )
 
         extra_info = {
-            "pinch_dist": pinch_dist,
-            "pinch_center": (
-                (thumb_tip[0] + index_tip[0]) // 2,
-                (thumb_tip[1] + index_tip[1]) // 2,
-            ),
+            "grab_spread": grab_spread,
+            "grab_center": grab_center,
             "open_count": open_fingers_count,
-            "is_pinch": is_pinch,
+            "is_grab": is_grab,
             "is_two_fingers": is_two_fingers,
             "is_open_palm": is_open_palm,
             "index_open": index_open,
@@ -96,15 +95,15 @@ class GestureRecognizer:
         }
 
         # EXCLUSIVE DECISION LOGIC (Strict Hierarchy):
-        # Rule 1: If PINCH condition is met, it MUST OVERRIDE OPEN_PALM completely!
-        if is_pinch:
-            return self.GESTURE_PINCH, extra_info
+        # Rule 1: GRAB (all 5 tips clustered) has HIGHEST priority
+        if is_grab:
+            return self.GESTURE_GRAB, extra_info
 
         # Rule 2: 2-Finger Capture gesture
         if is_two_fingers:
             return self.GESTURE_TWO_FINGERS, extra_info
 
-        # Rule 3: Open Palm gesture (only valid when NOT pinching)
+        # Rule 3: Open Palm gesture (only valid when NOT grabbing)
         if is_open_palm:
             return self.GESTURE_OPEN_PALM, extra_info
 
@@ -119,18 +118,19 @@ class GestureRecognizer:
 
         # Count occurrences in recent history
         if len(self.gesture_history) >= 2:
-            # If PINCH was detected in raw frame, output PINCH immediately for fast responsiveness
-            if raw_gesture == self.GESTURE_PINCH:
-                return self.GESTURE_PINCH, info
+            # If GRAB was detected in raw frame, output GRAB immediately for fast drag responsiveness
+            if raw_gesture == self.GESTURE_GRAB:
+                return self.GESTURE_GRAB, info
 
             # Otherwise require majority consensus
             counts = {}
             for g in self.gesture_history:
                 counts[g] = counts.get(g, 0) + 1
-            
+
             # Find most frequent gesture in history
             majority_gesture = max(counts, key=counts.get)
             if counts[majority_gesture] >= 2:
                 return majority_gesture, info
 
         return raw_gesture, info
+

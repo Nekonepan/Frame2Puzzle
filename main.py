@@ -24,14 +24,14 @@ def main():
     # 2. Initialize Hand Tracker, Gesture Recognizer, Capture Manager, & Puzzle Manager
     print("Initializing Hand Tracker, Gesture Recognizer, Capture Manager, & Puzzle Manager...")
     tracker = HandTracker(model_path="hand_landmarker.task", num_hands=2)
-    recognizer = GestureRecognizer(pinch_threshold_px=40)
+    recognizer = GestureRecognizer(grab_spread_threshold_px=55)
     capture_mgr = CaptureManager(countdown_seconds=3.0, gesture_hold_seconds=1.2)
     puzzle_mgr = PuzzleManager(rows=3, cols=3)
 
     STATE_PUZZLE_GAME = "PUZZLE_GAME"
 
-    # Phase 6: Track previous frame's pinch state for drag start/release detection
-    was_pinch = False
+    # Phase 6: Track previous frame's grab state for drag start/release detection
+    was_grab = False
 
     prev_time = time.time()
 
@@ -42,8 +42,8 @@ def main():
     print("1. Hold 2-FINGER GESTURE stably for 1.2 seconds.")
     print("2. A circular loading progress will appear (0% -> 100%).")
     print("3. Once held for 1.2s, the 3-second countdown starts!")
-    print("4. Show PINCH gesture (or press SPACE) to start Puzzle Game.")
-    print("5. In Puzzle Mode: PINCH a tile to drag, release to swap!")
+    print("4. Show GRAB gesture (or press SPACE) to start Puzzle Game.")
+    print("5. In Puzzle Mode: GRAB a tile to drag, release to swap!")
     print("6. Show OPEN PALM gesture (or press 'r') anytime to Retake.")
     print("7. Press 'q' or 'ESC' to exit.")
     print("=======================================================\n")
@@ -64,11 +64,11 @@ def main():
         results = tracker.process_frame(frame)
         hands_pts = tracker.get_hand_points(frame, results)
 
-        # Detect Single-Hand Gestures (TWO_FINGERS, OPEN_PALM, PINCH)
+        # Detect Single-Hand Gestures (TWO_FINGERS, OPEN_PALM, GRAB)
         is_two_fingers_detected = False
         any_open_palm = False
-        any_pinch = False
-        pinch_centers = []
+        any_grab = False
+        grab_centers = []
         active_gestures = []
 
         for idx, pts in enumerate(hands_pts):
@@ -80,10 +80,10 @@ def main():
             elif gesture_name == GestureRecognizer.GESTURE_OPEN_PALM:
                 any_open_palm = True
                 active_gestures.append("OPEN PALM")
-            elif gesture_name == GestureRecognizer.GESTURE_PINCH:
-                any_pinch = True
-                active_gestures.append("PINCH")
-                pinch_centers.append(info["pinch_center"])
+            elif gesture_name == GestureRecognizer.GESTURE_GRAB:
+                any_grab = True
+                active_gestures.append("GRAB")
+                grab_centers.append(info["grab_center"])
 
         # 4. State Machine (STREAMING -> COUNTDOWN -> CAPTURED -> PUZZLE_GAME)
         if capture_mgr.state == CaptureManager.STATE_STREAMING:
@@ -100,28 +100,28 @@ def main():
         elif capture_mgr.state == CaptureManager.STATE_CAPTURED:
             if any_open_palm:
                 capture_mgr.retake()
-            elif any_pinch:
-                print("\n[GAME STATE] PINCH gesture detected! Generating 3x3 Puzzle...")
+            elif any_grab:
+                print("\n[GAME STATE] GRAB gesture detected! Generating 3x3 Puzzle...")
                 puzzle_mgr.generate_puzzle(capture_mgr.captured_image)
                 capture_mgr.state = STATE_PUZZLE_GAME
 
         elif capture_mgr.state == STATE_PUZZLE_GAME:
             # --- Phase 6: Drag Interaction Logic (Keyboard-only restart) ---
-            if any_pinch and pinch_centers:
-                cursor_x, cursor_y = pinch_centers[0]
+            if any_grab and grab_centers:
+                cursor_x, cursor_y = grab_centers[0]
 
-                if not was_pinch:
-                    # Pinch just started this frame -> pick up tile
-                    puzzle_mgr.handle_pinch_start(cursor_x, cursor_y)
+                if not was_grab:
+                    # Grab just started this frame -> pick up tile
+                    puzzle_mgr.handle_grab_start(cursor_x, cursor_y)
                 else:
-                    # Pinch continuing -> update drag position
-                    puzzle_mgr.handle_pinch_move(cursor_x, cursor_y)
-            elif was_pinch and not any_pinch:
-                # Pinch just released this frame -> drop tile and snap/swap
-                puzzle_mgr.handle_pinch_release()
+                    # Grab continuing -> update drag position
+                    puzzle_mgr.handle_grab_move(cursor_x, cursor_y)
+            elif was_grab and not any_grab:
+                # Grab just released this frame -> drop tile and snap/swap
+                puzzle_mgr.handle_grab_release()
 
-        # Update pinch state for next frame transition detection
-        was_pinch = any_pinch
+        # Update grab state for next frame transition detection
+        was_grab = any_grab
 
         # 5. Visual Rendering & Overlays
         if capture_mgr.state == STATE_PUZZLE_GAME:
@@ -153,7 +153,7 @@ def main():
 
                 cv2.putText(
                     frame,
-                    "Show PINCH Gesture or Press SPACE to Start Puzzle!",
+                    "Show GRAB Gesture or Press SPACE to Start Puzzle!",
                     (20, fh - 20),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7,
@@ -165,8 +165,8 @@ def main():
         # Draw hand landmarks
         frame = tracker.draw_landmarks(frame, results, is_mirrored=True)
 
-        # Render PINCH Cursor
-        for cx, cy in pinch_centers:
+        # Render GRAB Cursor
+        for cx, cy in grab_centers:
             cv2.circle(frame, (cx, cy), 12, (0, 0, 255), -1, cv2.LINE_AA)
             cv2.circle(frame, (cx, cy), 16, (255, 255, 255), 2, cv2.LINE_AA)
 
@@ -225,7 +225,7 @@ def main():
             break
         elif key == ord("r"):
             capture_mgr.retake()
-            was_pinch = False
+            was_grab = False
         elif key == 32:  # Spacebar
             if capture_mgr.state == CaptureManager.STATE_CAPTURED:
                 puzzle_mgr.generate_puzzle(capture_mgr.captured_image)

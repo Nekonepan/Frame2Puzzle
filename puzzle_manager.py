@@ -182,12 +182,12 @@ class PuzzleManager:
                     return r, c
         return -1, -1
 
-    def handle_pinch_start(self, cursor_x, cursor_y):
-        """Called when a PINCH gesture begins. Picks up the tile under the cursor.
+    def handle_grab_start(self, cursor_x, cursor_y):
+        """Called when a GRAB gesture begins. Picks up the tile under the cursor.
 
         Args:
-            cursor_x: Pinch center X in screen coordinates.
-            cursor_y: Pinch center Y in screen coordinates.
+            cursor_x: Grab center X in screen coordinates.
+            cursor_y: Grab center Y in screen coordinates.
         """
         if self.is_solved or self.dragged_piece is not None:
             return
@@ -204,12 +204,12 @@ class PuzzleManager:
 
         print(f"[DRAG] Picked up piece #{target_piece.piece_id + 1} from grid ({target_piece.current_row},{target_piece.current_col})")
 
-    def handle_pinch_move(self, cursor_x, cursor_y):
-        """Called every frame while PINCH is held. Updates the dragged tile position.
+    def handle_grab_move(self, cursor_x, cursor_y):
+        """Called every frame while GRAB is held. Updates the dragged tile position.
 
         Args:
-            cursor_x: Current pinch center X in screen coordinates.
-            cursor_y: Current pinch center Y in screen coordinates.
+            cursor_x: Current grab center X in screen coordinates.
+            cursor_y: Current grab center Y in screen coordinates.
         """
         if self.dragged_piece is None:
             return
@@ -220,8 +220,8 @@ class PuzzleManager:
         # Determine which grid slot the cursor is currently hovering over
         self.hover_slot = self._screen_to_grid(cursor_x, cursor_y)
 
-    def handle_pinch_release(self):
-        """Called when the PINCH gesture ends. Snaps the tile to the nearest grid slot and swaps if occupied.
+    def handle_grab_release(self):
+        """Called when the GRAB gesture ends. Snaps the tile to the nearest grid slot and swaps if occupied.
 
         Returns:
             True if a swap was performed, False otherwise.
@@ -432,9 +432,9 @@ class PuzzleManager:
                 cv2.LINE_AA,
             )
             hint_text = (
-                "Move your PINCH to target slot, then release to swap!"
+                "Move your GRAB to target slot, then release to swap!"
                 if self.dragged_piece is not None
-                else "Use PINCH Gesture to pick and swap puzzle pieces!"
+                else "Use GRAB Gesture to pick and swap puzzle pieces!"
             )
             cv2.putText(
                 display_frame,
