@@ -2,7 +2,7 @@ VENV = .venv
 PYTHON = $(VENV)/bin/python
 PIP = $(VENV)/bin/pip
 
-.PHONY: all run setup clean help
+.PHONY: all run setup clean help get-model
 
 # Default target when typing 'make'
 all: run
@@ -11,6 +11,11 @@ all: run
 run: $(VENV)
 	@echo "🚀 Running Frame2Puzzle..."
 	@$(PYTHON) main.py
+
+# Download model asset (hand_landmarker.task) into repo root
+get-model:
+	@echo "⬇️  Fetching hand_landmarker.task model..."
+	@./scripts/get_model.sh
 
 # Create virtual environment & install dependencies from requirements.txt
 setup: $(VENV)
@@ -37,6 +42,7 @@ help:
 	@echo "======================================================="
 	@echo "  make         : Run Frame2Puzzle application directly"
 	@echo "  make run     : Run Frame2Puzzle application"
+	@echo "  make get-model: Download hand_landmarker.task into repo root"
 	@echo "  make setup   : Create .venv & install all dependencies"
 	@echo "  make clean   : Remove .venv and Python cache files"
 	@echo "  make help    : Show this help menu"
