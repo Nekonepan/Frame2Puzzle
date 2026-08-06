@@ -30,18 +30,22 @@ def main():
 
     STATE_PUZZLE_GAME = "PUZZLE_GAME"
 
+    # Phase 6: Track previous frame's pinch state for drag start/release detection
+    was_pinch = False
+
     prev_time = time.time()
 
     print("\n=======================================================")
-    print("   Frame2Puzzle - Phase 4/5: Gesture Hold Capture")
+    print("   Frame2Puzzle - Phase 6: Interactive Puzzle Drag")
     print("=======================================================")
     print("Instructions:")
     print("1. Hold 2-FINGER GESTURE stably for 1.2 seconds.")
     print("2. A circular loading progress will appear (0% -> 100%).")
     print("3. Once held for 1.2s, the 3-second countdown starts!")
     print("4. Show PINCH gesture (or press SPACE) to start Puzzle Game.")
-    print("5. Show OPEN PALM gesture (or press 'r') anytime to Retake.")
-    print("6. Press 'q' or 'ESC' to exit.")
+    print("5. In Puzzle Mode: PINCH a tile to drag, release to swap!")
+    print("6. Show OPEN PALM gesture (or press 'r') anytime to Retake.")
+    print("7. Press 'q' or 'ESC' to exit.")
     print("=======================================================\n")
 
     while True:
@@ -102,8 +106,26 @@ def main():
                 capture_mgr.state = STATE_PUZZLE_GAME
 
         elif capture_mgr.state == STATE_PUZZLE_GAME:
-            if any_open_palm:
+            # --- Phase 6: Drag Interaction Logic ---
+            if any_open_palm and puzzle_mgr.dragged_piece is None:
+                # Only allow retake when NOT actively dragging a tile
                 capture_mgr.retake()
+                was_pinch = False
+            elif any_pinch and pinch_centers:
+                cursor_x, cursor_y = pinch_centers[0]
+
+                if not was_pinch:
+                    # Pinch just started this frame -> pick up tile
+                    puzzle_mgr.handle_pinch_start(cursor_x, cursor_y)
+                else:
+                    # Pinch continuing -> update drag position
+                    puzzle_mgr.handle_pinch_move(cursor_x, cursor_y)
+            elif was_pinch and not any_pinch:
+                # Pinch just released this frame -> drop tile and snap/swap
+                puzzle_mgr.handle_pinch_release()
+
+        # Update pinch state for next frame transition detection
+        was_pinch = any_pinch
 
         # 5. Visual Rendering & Overlays
         if capture_mgr.state == STATE_PUZZLE_GAME:
@@ -161,16 +183,30 @@ def main():
         fps = 1 / (curr_time - prev_time) if (curr_time - prev_time) > 0 else 0
         prev_time = curr_time
 
-        cv2.putText(
-            frame,
-            f"FPS: {int(fps)}",
-            (20, 35),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.85,
-            (0, 255, 0),
-            2,
-            cv2.LINE_AA,
-        )
+        # FPS overlay (top-left in puzzle mode is covered by banner, so shift to bottom-left)
+        if capture_mgr.state == STATE_PUZZLE_GAME:
+            fh, fw = frame.shape[:2]
+            cv2.putText(
+                frame,
+                f"FPS: {int(fps)}",
+                (20, fh - 15),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 200, 0),
+                1,
+                cv2.LINE_AA,
+            )
+        else:
+            cv2.putText(
+                frame,
+                f"FPS: {int(fps)}",
+                (20, 35),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.85,
+                (0, 255, 0),
+                2,
+                cv2.LINE_AA,
+            )
 
         if active_gestures and capture_mgr.state != STATE_PUZZLE_GAME:
             cv2.putText(
@@ -193,6 +229,7 @@ def main():
             break
         elif key == ord("r"):
             capture_mgr.retake()
+            was_pinch = False
         elif key == 32:  # Spacebar
             if capture_mgr.state == CaptureManager.STATE_CAPTURED:
                 puzzle_mgr.generate_puzzle(capture_mgr.captured_image)
@@ -206,3 +243,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
